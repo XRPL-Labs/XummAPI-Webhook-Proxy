@@ -77,7 +77,11 @@ const send = async (url, data, payload, attempt = 1) => {
     const callReturnCode = await call.status
     const callReturnText = await call.text()
 
-    if (callReturnCode !== 200 && callReturnCode !== 204) {
+    if (
+      callReturnCode !== 200 &&
+      callReturnCode !== 201 &&
+      callReturnCode !== 204
+    ) {
       scheduleRetry(url, data, payload, attempt + 1)
     }
 
