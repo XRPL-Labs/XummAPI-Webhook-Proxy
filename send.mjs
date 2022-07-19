@@ -38,7 +38,44 @@ const scheduleRetry = async (url, data, payload, nextAttempt) => {
   }
 }
 
+const urlInvalid = async (url) => {
+  const urlResponseError = await query(`
+    SELECT
+      url
+    FROM (
+      SELECT
+        count(1) c, url
+      FROM
+        calls
+      WHERE
+        response_code = 404
+        AND
+        attempt = 5
+        AND
+        moment > DATE_SUB(NOW(), INTERVAL 1 HOUR)
+      GROUP BY
+        url
+      ORDER BY
+        count(1) DESC
+    ) G1
+    WHERE
+      c >= 10
+      AND
+      url = :url
+  `, {
+    url
+  })
+
+  return Array.isArray(urlResponseError) && urlResponseError.length > 0
+}
+
 const send = async (url, data, payload, attempt = 1) => {
+  const skipUrl = await urlInvalid(url)
+  if (skipUrl) {
+    log('Skipping URL', url)
+    return
+  }
+
   log('Calling webhook', { url, data })
 
   if (attempt === 1) {
