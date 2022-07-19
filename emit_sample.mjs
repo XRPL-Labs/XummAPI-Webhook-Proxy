@@ -5,8 +5,7 @@ const log = debug('xummproxy:test')
 
 setTimeout(function () {
   redis.rpush(channel, JSON.stringify({
-    // url: 'https://webhook.site/3ba50d49-56f1-4a5d-8fd5-ba75c5ded08f',
-    url: 'https://xapps.xumm.app/api/v1/internal/stats/private',
+    url: 'https://webhook.site/3ba50d49-56f1-4a5d-8fd5-ba75c5ded08f',
     payload: '3ba50d49-56f1-4a5d-8fd5-ba75c5ded08f',
     data: {
       someData: true,

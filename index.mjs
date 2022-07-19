@@ -9,6 +9,13 @@ import {redis, channel as redisChannel} from './redis.mjs'
 import debug from 'debug'
 const log = debug('xummproxy')
 
+
+process.on('unhandledRejection', (err, p) => {
+  console.log('An unhandledRejection occurred')
+  // console.log(`Rejected Promise: ${p}`)
+  // console.log(`Rejection: ${err}`)
+})
+
 let processing = true
 
 process.on('SIGINT', function () {
