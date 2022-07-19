@@ -9,11 +9,8 @@ import {redis, channel as redisChannel} from './redis.mjs'
 import debug from 'debug'
 const log = debug('xummproxy')
 
-
-process.on('unhandledRejection', (err, p) => {
+process.on('unhandledRejection', () => {
   console.log('An unhandledRejection occurred')
-  // console.log(`Rejected Promise: ${p}`)
-  // console.log(`Rejection: ${err}`)
 })
 
 let processing = true
@@ -49,7 +46,9 @@ while (processing) {
       if (typeof data.url === 'string' && typeof data.payload === 'string') {
         if (typeof data.data === 'object' && data) {
           log('Valid REDIS message, process...', data)
-          counter.inc()
+          if (processing) {
+            counter.inc()
+          }
           send(data.url, data.data, data.payload)
         } else {
           log('Invalid message, missing data object')
