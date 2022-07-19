@@ -18,7 +18,8 @@
     "ioredis": "^5.2.1",
     "ipaddr.js": "^2.0.1",
     "mysql": "^2.18.1",
-    "node-fetch": "^3.2.8"
+    "node-fetch": "^3.2.8",
+    "tx2": "^1.0.5"
   },
   "devDependencies": {
     "nodemon": "^1.4.1",

@@ -1,3 +1,8 @@
+import tx2 from 'tx2'
+const metric = tx2.metric({
+  name: 'Current requests'
+})
+
 import debug from 'debug'
 const log = debug('xummproxy:send-fetch')
 
@@ -12,6 +17,7 @@ const timeout = 15_000 // ms
 const scheduleRetry = async (url, data, payload, nextAttempt) => {
   if (nextAttempt < 6) {
     currentCalls++
+    metric.set(currentCalls)
     const nextTimeout =  nextAttempt < 3
       ? 10
       : nextAttempt > 3
@@ -29,6 +35,7 @@ const send = async (url, data, payload, attempt = 1) => {
 
   if (attempt === 1) {
     currentCalls++
+    metric.set(currentCalls)
   }
 
   try {
@@ -89,6 +96,7 @@ const send = async (url, data, payload, attempt = 1) => {
   }
 
   currentCalls--
+  metric.set(currentCalls)
 }
 
 export {
