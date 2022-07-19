@@ -1,7 +1,7 @@
-import tx2 from 'tx2'
-const metric = tx2.metric({
-  name: 'Current requests'
-})
+// import tx2 from 'tx2'
+// const metric = tx2.metric({
+//   name: 'Current requests'
+// })
 
 import debug from 'debug'
 const log = debug('xummproxy:send-fetch')
@@ -10,11 +10,11 @@ import {query} from './database.mjs'
 import {validUrl} from './resolve.mjs'
 import fetch from 'node-fetch'
 
-let destructing = false
+// let destructing = false
 
-process.on('SIGINT', function () {
-  destructing = true
-})
+// process.on('SIGINT', function () {
+//   destructing = true
+// })
 
 let currentCalls = 0
 
@@ -23,9 +23,9 @@ const timeout = 15_000 // ms
 const scheduleRetry = async (url, data, payload, nextAttempt) => {
   if (nextAttempt < 6) {
     currentCalls++
-    if (!destructing) {
-      metric.set(currentCalls)
-    }
+    // if (!destructing) {
+    //   metric.set(currentCalls)
+    // }
     const nextTimeout =  nextAttempt < 3
       ? 10
       : nextAttempt > 3
@@ -43,9 +43,9 @@ const send = async (url, data, payload, attempt = 1) => {
 
   if (attempt === 1) {
     currentCalls++
-    if (!destructing) {
-      metric.set(currentCalls)
-    }
+    // if (!destructing) {
+    //   metric.set(currentCalls)
+    // }
   }
 
   try {
@@ -106,9 +106,9 @@ const send = async (url, data, payload, attempt = 1) => {
   }
 
   currentCalls--
-  if (!destructing) {
-    metric.set(currentCalls)
-  }
+  // if (!destructing) {
+  //   metric.set(currentCalls)
+  // }
 }
 
 export {

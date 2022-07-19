@@ -1,7 +1,7 @@
-import tx2 from 'tx2'
-const counter = tx2.counter({
-  name: 'Historic Requests'
-})
+// import tx2 from 'tx2'
+// const counter = tx2.counter({
+//   name: 'Historic Requests'
+// })
 
 import {send, currentCalls} from './send.mjs'
 import {redis, channel as redisChannel} from './redis.mjs'
@@ -46,9 +46,9 @@ while (processing) {
       if (typeof data.url === 'string' && typeof data.payload === 'string') {
         if (typeof data.data === 'object' && data) {
           log('Valid REDIS message, process...', data)
-          if (processing) {
-            counter.inc()
-          }
+          // if (processing) {
+          //   counter.inc()
+          // }
           send(data.url, data.data, data.payload)
         } else {
           log('Invalid message, missing data object')
