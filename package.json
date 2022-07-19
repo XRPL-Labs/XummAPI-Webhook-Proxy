@@ -1,0 +1,27 @@
+{
+  "name": "xumm-webhook-proxy",
+  "version": "0.0.1",
+  "description": "Xumm Webhook Caller (API Consumer Callbacks)",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "clear; DEBUG=xummproxy* nodemon .",
+    "emit": "clear; DEBUG=* node emit_sample.mjs",
+    "pm2": "pm2 startOrGracefulReload pm2.config.js --update-env",
+    "reload": "pm2 sendSignal SIGINT webhookproxy"
+  },
+  "author": "Wietse Wind <wietse@xrpl-labs.com>",
+  "license": "ISC",
+  "dependencies": {
+    "debug": "^4.3.4",
+    "dotenv": "^16.0.1",
+    "ioredis": "^5.2.1",
+    "ipaddr.js": "^2.0.1",
+    "mysql": "^2.18.1",
+    "node-fetch": "^3.2.8"
+  },
+  "devDependencies": {
+    "nodemon": "^1.4.1",
+    "pm2": "^5.2.0"
+  }
+}
