@@ -62,7 +62,8 @@ const send = async (url, data, payload, attempt = 1) => {
     const call = await fetch(url, {
       method: 'post',
       headers: {
-        'content-type': 'application/json;charset=UTF-8',
+//        'content-type': 'application/json;charset=UTF-8',
+        'content-type': 'application/json',
         'user-agent': 'xumm-webhook',
         'x-xumm-attempt': attempt,
         'x-xumm-payload': payload
