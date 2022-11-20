@@ -5,6 +5,7 @@
 
 import {send, currentCalls} from './send.mjs'
 import {redis, channel as redisChannel} from './redis.mjs'
+import {apiserver} from './apiserver.mjs'
 
 import debug from 'debug'
 const log = debug('xummproxy')
@@ -13,9 +14,13 @@ process.on('unhandledRejection', () => {
   console.log('An unhandledRejection occurred')
 })
 
+apiserver.start()
+
 let processing = true
 
 process.on('SIGINT', function () {
+  apiserver.close()
+
   if (processing) {
     log('Graceful Stop, unsubscribing from Redis and cleaning up...')
     // redis.unsubscribe(redisChannel)
