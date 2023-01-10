@@ -54,7 +54,7 @@ while (processing) {
           // if (processing) {
           //   counter.inc()
           // }
-          send(data.url, data.data, data.payload)
+          send(data.url, data.data, data.payload, data?.secret || '')
         } else {
           log('Invalid message, missing data object')
         }

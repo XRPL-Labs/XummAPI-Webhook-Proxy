@@ -5,6 +5,7 @@
 
 import debug from 'debug'
 const log = debug('xummproxy:send-fetch')
+import crypto from 'crypto'
 
 import {query} from './database.mjs'
 import {validUrl} from './resolve.mjs'
@@ -20,7 +21,7 @@ let currentCalls = 0
 
 const timeout = 15_000 // ms
 
-const scheduleRetry = async (url, data, payload, nextAttempt) => {
+const scheduleRetry = async (url, data, payload, secret, nextAttempt) => {
   if (nextAttempt < 6) {
     currentCalls++
     // if (!destructing) {
@@ -33,7 +34,7 @@ const scheduleRetry = async (url, data, payload, nextAttempt) => {
         : 60
     log('Schedule next attempt + in (sec)', { payload, nextAttempt, nextTimeout })
     setTimeout(function () {
-      send(url, data, payload, nextAttempt)
+      send(url, data, payload, secret, nextAttempt)
     }, nextTimeout * 1000)
   }
 }
@@ -69,7 +70,7 @@ const urlInvalid = async (url) => {
   return Array.isArray(urlResponseError) && urlResponseError.length > 0
 }
 
-const send = async (url, data, payload, attempt = 1) => {
+const send = async (url, data, payload, secret, attempt = 1) => {
   const skipUrl = await urlInvalid(url)
   if (skipUrl) {
     log('Skipping URL', url)
@@ -92,20 +93,26 @@ const send = async (url, data, payload, attempt = 1) => {
 
     const controller = new AbortController()
     const id = setTimeout(() => {
-      scheduleRetry(url, data, payload, attempt + 1)
+      scheduleRetry(url, data, payload, secret, attempt + 1)
       controller.abort()
     }, timeout)
+
+    const body = JSON.stringify(data || {})
+    const now = String(Math.round(new Date() / 1000))
+    const signature = crypto.createHmac('sha1', secret.replace('-', '')).update(now + body).digest('hex')
   
     const call = await fetch(url, {
       method: 'post',
       headers: {
-//        'content-type': 'application/json;charset=UTF-8',
+        // 'content-type': 'application/json;charset=UTF-8',
         'content-type': 'application/json',
         'user-agent': 'xumm-webhook',
         'x-xumm-attempt': attempt,
-        'x-xumm-payload': payload
+        'x-xumm-payload': payload,
+        'x-xumm-request-timestamp': now,
+        'x-xumm-request-signature': signature,
       },
-      body: JSON.stringify(data || {}),
+      body,
       signal: controller.signal
     })
 
@@ -119,7 +126,7 @@ const send = async (url, data, payload, attempt = 1) => {
       callReturnCode !== 201 &&
       callReturnCode !== 204
     ) {
-      scheduleRetry(url, data, payload, attempt + 1)
+      scheduleRetry(url, data, payload, secret, attempt + 1)
     }
 
     log({ payload, c: callReturnCode, t: callReturnText.trim().replace(/[ \t\r\n]{2,}/g, ' ').slice(0, 200) })
