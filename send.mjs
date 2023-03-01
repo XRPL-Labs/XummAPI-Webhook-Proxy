@@ -129,7 +129,7 @@ const send = async (url, data, payload, secret, attempt = 1) => {
       scheduleRetry(url, data, payload, secret, attempt + 1)
     }
 
-    log({ payload, c: callReturnCode, t: callReturnText.trim().replace(/[ \t\r\n]{2,}/g, ' ').slice(0, 200) })
+    log({ payload, c: callReturnCode, t: callReturnText.trim().replace(/[ \t\r\n]{1,}/g, ' ').slice(0, 200) })
 
     query(`
       INSERT INTO calls (
