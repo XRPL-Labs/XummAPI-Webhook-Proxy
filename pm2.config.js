@@ -6,12 +6,12 @@ module.exports = {
     name: 'webhookproxy',
     script: 'index.mjs',
     watch: false,
-    instances: 2,
+    instances: 1,
     exec_mode: 'cluster',
     ignore_watch: ["node_modules", "db", ".git"],
     env: {
-      DEBUG: 'xummproxy*',
-      ...process.env
+      ...process.env,
+      DEBUG: 'xummproxy*'
     }
   }]
 }

@@ -10,8 +10,8 @@ import {apiserver} from './apiserver.mjs'
 import debug from 'debug'
 const log = debug('xummproxy')
 
-process.on('unhandledRejection', () => {
-  console.log('An unhandledRejection occurred')
+process.on('unhandledRejection', e => {
+  console.log('An unhandledRejection occurred', e)
 })
 
 apiserver.start()

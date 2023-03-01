@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "clear; DEBUG=xummproxy* nodemon .",
     "emit": "clear; DEBUG=* node emit_sample.mjs",
-    "pm2": "pm2 startOrGracefulReload pm2.config.js --update-env",
+    "pm2": "DEBUG=xummproxy* pm2 startOrGracefulReload pm2.config.js --update-env",
     "reload": "pm2 sendSignal SIGINT webhookproxy"
   },
   "author": "Wietse Wind <wietse@xrpl-labs.com>",
