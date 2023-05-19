@@ -119,7 +119,8 @@ const send = async (url, data, payload, secret, attempt = 1) => {
     clearTimeout(id)
 
     const callReturnCode = await call.status
-    const callReturnText = call.headers.join(`\n`).trim() + `\n----\nBody:\n` + (await call.text()).trim()
+    // const callReturnText = call.headers.join(`\n`).trim() + `\n----\nBody:\n` + (await call.text()).trim()
+    const callReturnText = `Body:\n` + (await call.text()).trim()
 
     if (
       callReturnCode !== 200 &&
