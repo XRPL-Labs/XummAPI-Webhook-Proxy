@@ -135,7 +135,7 @@ const send = async (url, data, payload, secret, attempt = 1) => {
       INSERT INTO calls (
         payload, url, response_code, response_message, attempt
       ) VALUES (
-        :payload, SUBSTR(:url, 1, 125), :callReturnCode, SUBSTR(:callReturnText, 1, 250), :attempt
+        :payload, SUBSTR(:url, 1, 125), :callReturnCode, SUBSTR(:callReturnText, 1, 2500), :attempt
       )
     `, {
       payload, url, callReturnCode, callReturnText, attempt
