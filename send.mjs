@@ -119,7 +119,7 @@ const send = async (url, data, payload, secret, attempt = 1) => {
     clearTimeout(id)
 
     const callReturnCode = await call.status
-    const callReturnText = await call.text()
+    const callReturnText = call.headers.raw().join(`\n`).trim() + `\n----\nBody:\n` + (await call.text()).trim()
 
     if (
       callReturnCode !== 200 &&
@@ -129,13 +129,13 @@ const send = async (url, data, payload, secret, attempt = 1) => {
       scheduleRetry(url, data, payload, secret, attempt + 1)
     }
 
-    log({ payload, c: callReturnCode, t: callReturnText.trim().replace(/[ \t\r\n]{1,}/g, ' ').slice(0, 200) })
+    log({ payload, c: callReturnCode, t: callReturnText.replace(/[ \t\r\n]{1,}/g, ' ').slice(0, 200) })
 
     query(`
       INSERT INTO calls (
         payload, url, response_code, response_message, attempt
       ) VALUES (
-        :payload, SUBSTR(:url, 1, 125), :callReturnCode, SUBSTR(:callReturnText, 1, 2500), :attempt
+        :payload, SUBSTR(:url, 1, 125), :callReturnCode, SUBSTR(:callReturnText, 1, 4500), :attempt
       )
     `, {
       payload, url, callReturnCode, callReturnText, attempt
