@@ -74,6 +74,13 @@ const send = async (url, data, payload, secret, attempt = 1) => {
   const skipUrl = await urlInvalid(url)
   if (skipUrl) {
     log('Skipping URL', url)
+    query(`
+      INSERT INTO calls (
+        payload, url, response_code, response_message, attempt, error
+      ) VALUES (
+        :payload, SUBSTR(:url, 1, 125), 999, 'Skipped, exceeding 404 limits on similar URL in past hour', 10, 'Skipped, exceeding 404 limits on similar URL in past hour'
+      )
+    `, { payload, url, })
     return
   }
 
