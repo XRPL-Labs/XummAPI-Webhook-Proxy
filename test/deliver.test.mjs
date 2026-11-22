@@ -144,3 +144,25 @@ test('deliver: a public URL that redirects to a protected domain is refused, no 
     assert.deepEqual(seen.map(s => s.url), ['https://tunnel.example.net/w'], location)
   }
 })
+
+const APP = '3b58aa5d-0000-4000-8000-000000000001'
+const bound = {domains: 'example-corp.com', allowed: APP + '|https://desk.example-corp.com/api/balance, https://desk.example-corp.com/api/open'}
+
+test('protectedRefused: an entry with an application is only for the webhooks of that application', () => {
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, APP), false)
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, APP.toUpperCase()), false)
+  for (const app of ['', undefined, null, '6defa775-aaee-4370-bfbe-9d554e2e58d9', APP + 'x']) assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, app), true, String(app))
+  // An entry without an application: any application
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/open', bound, ''), false)
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/other', bound, APP), true)
+})
+
+test('deliver: the first-party URL is delivered for its own application only', async () => {
+  const own = client({})
+  await deliver('https://desk.example-corp.com/api/balance', {...request, application: APP}, {fetch: own.fetch, check: async () => true, protect: bound})
+  assert.equal(own.seen.length, 1)
+  const other = client({})
+  await assert.rejects(deliver('https://desk.example-corp.com/api/balance', {...request, application: '6defa775-aaee-4370-bfbe-9d554e2e58d9'}, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
+  await assert.rejects(deliver('https://desk.example-corp.com/api/balance', request, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
+  assert.equal(other.seen.length, 0)
+})

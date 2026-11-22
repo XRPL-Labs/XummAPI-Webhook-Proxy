@@ -116,7 +116,9 @@ const send = async (url, data, payload, secret, attempt = 1) => {
         'x-xumm-request-signature': signature,
       },
       body,
-      signal: controller.signal
+      signal: controller.signal,
+      // The application of this webhook (set by the backend): for destinations on our own domains
+      application: data?.meta?.application_uuidv4
     })
 
     clearTimeout(id)

@@ -102,14 +102,15 @@ export async function validUrl (url) {
 /**
  * Destinations on our own domains. This service calls URLs that strangers choose; our own sites must not treat its
  * address as one of ours. So: a URL on a protected domain (or a subdomain of it) is delivered only when it is one of
- * the exact first-party webhook URLs (scheme, host, port and path; the query is not compared).
+ * the exact first-party webhook URLs (scheme, host, port and path; the query is not compared), and, when the entry
+ * names an application ('<application uuid>|<url>'), only for the webhooks of that application.
  * Both lists come from the configuration (.env): PROXY_CONFIG_PROTECTED_DOMAINS and PROXY_CONFIG_PROTECTED_ALLOWED_URLS,
  * comma separated. No list: nothing is protected (as before).
  */
 const list = value => String(value || '').split(',').map(v => v.trim()).filter(Boolean)
 const exact = url => { const u = new URL(url); return (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase() }
 
-export function protectedRefused (url, {domains, allowed} = {}) {
+export function protectedRefused (url, {domains, allowed} = {}, application = '') {
   const protect = list(domains).map(d => d.toLowerCase().replace(/^\*?\./, ''))
   if (protect.length === 0) return false
   let parsed
@@ -120,8 +121,17 @@ export function protectedRefused (url, {domains, allowed} = {}) {
   }
   const host = parsed.hostname.toLowerCase().replace(/\.+$/, '')
   if (!protect.some(d => host === d || host.endsWith('.' + d))) return false
-  const ok = list(allowed).map(a => { try { return exact(a) } catch (e) { return '' } }).filter(Boolean)
-  return !ok.includes(exact(parsed.toString()))
+  // An entry is '<url>' (any application) or '<application uuid>|<url>' (only the webhooks of that application)
+  const wanted = exact(parsed.toString())
+  const app = String(application || '').toLowerCase()
+  return !list(allowed).some(entry => {
+    const [first, second] = entry.split('|').map(v => v.trim())
+    try {
+      return second === undefined ? exact(first) === wanted : (app !== '' && first.toLowerCase() === app && exact(second) === wanted)
+    } catch (e) {
+      return false
+    }
+  })
 }
 
 // A redirect stays on the host that was asked: the recipient chose that host, not another one

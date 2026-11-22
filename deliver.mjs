@@ -15,12 +15,12 @@ export const maxResponseBytes = 512 * 1024
  * As before for the recipient: 301 / 302 / 303 continue as GET without body, 307 / 308 keep method and body.
  * Resolves with the last response (a redirect that is not followed is the result: its code is logged).
  */
-export async function deliver (url, {method = 'post', headers = {}, body, signal} = {}, {fetch = nodeFetch, check = validUrl, protect = {domains: config.PROTECTED_DOMAINS, allowed: config.PROTECTED_ALLOWED_URLS}} = {}) {
+export async function deliver (url, {method = 'post', headers = {}, body, signal, application = ''} = {}, {fetch = nodeFetch, check = validUrl, protect = {domains: config.PROTECTED_DOMAINS, allowed: config.PROTECTED_ALLOWED_URLS}} = {}) {
   let target = String(url)
   let request = {method, headers: {...headers}, body}
 
   // Our own domains: only the exact first-party webhook URLs (resolve.mjs)
-  if (protectedRefused(target, protect)) {
+  if (protectedRefused(target, protect, application)) {
     throw new Error('Invalid URL')
   }
 
@@ -51,7 +51,7 @@ export async function deliver (url, {method = 'post', headers = {}, body, signal
     }
 
     // A redirect to another host is not followed: not to our own sites, and not anywhere else
-    if (!sameHost(next, target) || protectedRefused(next, protect)) {
+    if (!sameHost(next, target) || protectedRefused(next, protect, application)) {
       throw new Error(redirectRefused)
     }
 
