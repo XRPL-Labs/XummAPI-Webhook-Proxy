@@ -8,8 +8,7 @@ const log = debug('xummproxy:send-fetch')
 import crypto from 'crypto'
 
 import {query} from './database.mjs'
-import {validUrl} from './resolve.mjs'
-import fetch from 'node-fetch'
+import {deliver} from './deliver.mjs'
 
 // let destructing = false
 
@@ -94,10 +93,6 @@ const send = async (url, data, payload, secret, attempt = 1) => {
   }
 
   try {
-    if (!(await validUrl(url))) {
-      throw new Error('Invalid URL')
-    }
-
     const controller = new AbortController()
     const id = setTimeout(() => {
       scheduleRetry(url, data, payload, secret, attempt + 1)
@@ -108,7 +103,8 @@ const send = async (url, data, payload, secret, attempt = 1) => {
     const now = String(Math.round(new Date() / 1000))
     const signature = crypto.createHmac('sha1', secret.replace('-', '')).update(now + body).digest('hex')
   
-    const call = await fetch(url, {
+    // Public destinations only, also for every redirect: see deliver.mjs
+    const call = await deliver(url, {
       method: 'post',
       headers: {
         // 'content-type': 'application/json;charset=UTF-8',
