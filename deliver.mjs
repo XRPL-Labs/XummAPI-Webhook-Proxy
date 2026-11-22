@@ -1,5 +1,5 @@
 import nodeFetch from 'node-fetch'
-import {validUrl, agentFor, protectedRefused, sameHost} from './resolve.mjs'
+import {validUrl, agentFor, agentForFirstParty, protectedRefused, protectedDomain, sameHost} from './resolve.mjs'
 import {config} from './config.mjs'
 
 const redirectCodes = [301, 302, 303, 307, 308]
@@ -25,7 +25,11 @@ export async function deliver (url, {method = 'post', headers = {}, body, signal
   }
 
   for (let hop = 0; ; hop++) {
-    if (!(await check(target))) {
+    // On a protected domain and not refused: one of the exact first-party URLs. Only those can have an address in a
+    // reserved block (resolve.mjs).
+    const firstParty = protectedDomain(target, protect)
+
+    if (!(await check(target, {firstParty}))) {
       // After a redirect the recipient's server sent us there: its own text, for the report (apiserver: /refused)
       throw new Error(hop === 0 ? 'Invalid URL' : redirectRefused)
     }
@@ -34,7 +38,7 @@ export async function deliver (url, {method = 'post', headers = {}, body, signal
       ...request,
       signal,
       redirect: 'manual',
-      agent: agentFor,
+      agent: firstParty ? agentForFirstParty : agentFor,
       size: maxResponseBytes,
     })
 

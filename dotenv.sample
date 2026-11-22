@@ -17,3 +17,7 @@ PROXY_CONFIG_MYSQL_PORT=3306
 # PROXY_CONFIG_PROTECTED_DOMAINS=example.com,example.org
 # An entry: <url>, or <application uuid>|<url> (only the webhooks of that application)
 # PROXY_CONFIG_PROTECTED_ALLOWED_URLS=00000000-0000-4000-8000-000000000000|https://hooks.example.com/webhook,https://example.org/api/hook
+
+# Reserved address blocks (CIDR, IPv4 and IPv6, comma separated): a destination with an address in one of these blocks
+# is refused, except for the exact URLs of PROXY_CONFIG_PROTECTED_ALLOWED_URLS.
+# PROXY_CONFIG_RESERVED_ADDRESS_BLOCKS=192.0.2.0/24,2001:db8::/32,198.51.100.7

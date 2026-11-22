@@ -1,7 +1,7 @@
 // node --test test/
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {publicAddress, publicLookup, validUrl, protectedRefused, sameHost} from '../resolve.mjs'
+import {publicAddress, publicLookup, validUrl, protectedRefused, protectedDomain, sameHost, parseBlocks, reservedAddress, lookupWith, agentFor, agentForFirstParty} from '../resolve.mjs'
 import {deliver, maxRedirects, redirectRefused} from '../deliver.mjs'
 
 const notPublic = [
@@ -165,4 +165,45 @@ test('deliver: the first-party URL is delivered for its own application only', a
   await assert.rejects(deliver('https://desk.example-corp.com/api/balance', {...request, application: '6defa775-aaee-4370-bfbe-9d554e2e58d9'}, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
   await assert.rejects(deliver('https://desk.example-corp.com/api/balance', request, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
   assert.equal(other.seen.length, 0)
+})
+
+test('reserved address blocks: CIDR and single addresses, IPv4 and IPv6, IPv4-mapped', () => {
+  const blocks = parseBlocks('8.8.8.0/24, 1.1.1.1, 2606:4700::/32, 2001:4860:4860::8888, not a block, ')
+  assert.equal(blocks.length, 4)
+  for (const a of ['8.8.8.8', '8.8.8.0', '8.8.8.255', '1.1.1.1', '2606:4700::1111', '2606:4700:ffff::1', '2001:4860:4860::8888', '::ffff:8.8.8.8']) assert.equal(reservedAddress(a, blocks), true, a)
+  for (const a of ['8.8.9.1', '8.8.7.255', '1.1.1.2', '2606:4701::1', '2001:4860:4860::8844', '10.0.0.1', 'not an address', '']) assert.equal(reservedAddress(a, blocks), false, a)
+  assert.equal(reservedAddress('8.8.8.8', parseBlocks('')), false)
+})
+
+test('lookupWith: every answer must be accepted (one reserved answer of two refuses the name)', async () => {
+  const blocks = parseBlocks('8.8.8.0/24')
+  const open = a => publicAddress(a) && !reservedAddress(a, blocks)
+  const dns = answers => (hostname, options, cb) => cb(null, answers.map(address => ({address, family: 4})))
+  const run = (lookup) => new Promise(resolve => lookup('name.example', {all: true}, (e, list) => resolve(e ? e.code : list.map(a => a.address))))
+  assert.equal(await run(lookupWith(open, dns(['8.8.8.8']))), 'EDESTNOTPUBLIC')
+  assert.equal(await run(lookupWith(open, dns(['9.9.9.9', '8.8.8.8']))), 'EDESTNOTPUBLIC')
+  assert.deepEqual(await run(lookupWith(open, dns(['9.9.9.9']))), ['9.9.9.9'])
+  assert.deepEqual(await run(lookupWith(publicAddress, dns(['8.8.8.8']))), ['8.8.8.8'])
+  assert.equal(await run(lookupWith(publicAddress, dns(['8.8.8.8', '10.0.0.1']))), 'EDESTNOTPUBLIC')
+})
+
+test('deliver: the first-party check and agent only for a URL on a protected domain', async () => {
+  const protect = {domains: 'example.org', allowed: 'https://hooks.example.org/webhook'}
+  assert.equal(protectedDomain('https://hooks.example.org/webhook', protect), true)
+  assert.equal(protectedDomain('https://example.com/webhook', protect), false)
+  const seen = []
+  const fetch = async (url, options) => { seen.push({url, agent: options.agent}); return {status: 200, headers: {get: () => null}} }
+  const check = async (url, options) => { seen.push({check: url, firstParty: options.firstParty}); return true }
+  await deliver('https://hooks.example.org/webhook', {}, {fetch, check, protect})
+  await deliver('https://example.com/webhook', {}, {fetch, check, protect})
+  assert.deepEqual(seen.filter(s => s.check).map(s => s.firstParty), [true, false])
+  assert.deepEqual(seen.filter(s => s.url).map(s => s.agent === agentForFirstParty), [true, false])
+  assert.equal(seen.filter(s => s.url)[1].agent, agentFor)
+})
+
+test('deliver: a destination that the check refuses (reserved block) gets no request', async () => {
+  const seen = []
+  const fetch = async url => { seen.push(url); return {status: 200, headers: {get: () => null}} }
+  await assert.rejects(deliver('https://stranger.example.com/hook', {}, {fetch, check: async (url, {firstParty}) => firstParty, protect: {domains: 'example.org', allowed: ''}}), /Invalid URL/)
+  assert.equal(seen.length, 0)
 })
