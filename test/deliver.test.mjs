@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {publicAddress, publicLookup, validUrl} from '../resolve.mjs'
-import {deliver, maxRedirects} from '../deliver.mjs'
+import {deliver, maxRedirects, redirectRefused} from '../deliver.mjs'
 
 const notPublic = [
   '127.0.0.1', '127.1.2.3', '10.0.0.1', '10.133.0.10', '172.16.0.1', '192.168.1.1', '169.254.169.254', '0.0.0.0',
@@ -59,7 +59,7 @@ test('deliver: a redirect to a local address is refused, no request is made to i
   for (const location of ['http://127.0.0.1/', 'http://169.254.169.254/metadata/v1.json', 'http://10.133.0.10:3306/', 'http://[::ffff:127.0.0.1]/', 'http://localhost:6500/', 'file:///etc/passwd']) {
     for (const status of [301, 302, 303, 307, 308]) {
       const {fetch, seen} = client({'https://8.8.8.8/w': {status, location}})
-      await assert.rejects(deliver('https://8.8.8.8/w', request, {fetch}), /Invalid URL/, status + ' ' + location)
+      await assert.rejects(deliver('https://8.8.8.8/w', request, {fetch}), e => e.message === redirectRefused, status + ' ' + location)
       assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/w'], status + ' ' + location)
     }
   }
@@ -97,6 +97,7 @@ test('deliver: a redirect loop ends: the last redirect is the result', async () 
 
 test('deliver: a first URL that is not public is refused without a request', async () => {
   const {fetch, seen} = client({})
-  await assert.rejects(deliver('http://[::ffff:127.0.0.1]/', request, {fetch}), /Invalid URL/)
+  await assert.rejects(deliver('http://[::ffff:127.0.0.1]/', request, {fetch}), e => e.message === 'Invalid URL')
   assert.equal(seen.length, 0)
+  assert.equal(redirectRefused, 'Invalid URL (redirect)')
 })
