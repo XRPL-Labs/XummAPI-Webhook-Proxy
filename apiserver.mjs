@@ -1,6 +1,7 @@
 import {query} from './database.mjs'
 import debug from 'debug'
 import express from 'express'
+import {redirectRefused} from './deliver.mjs'
 
 const log = debug('xummproxy:apiserver')
 let server
@@ -26,6 +27,27 @@ const apiserver = {
       `, req.params))
     })
     
+    // Deliveries that were refused after a redirect, per payload, in the last N hours (for the backend)
+    app.get('/refused/:hours([0-9]{1,3})', async (req, res) => {
+      return res.json(await query(`
+        SELECT
+          payload,
+          COUNT(1) n,
+          MAX(moment) last
+        FROM
+          calls
+        WHERE
+          moment > DATE_SUB(NOW(), INTERVAL :hours HOUR)
+          AND
+          error = :error
+        GROUP BY
+          payload
+        ORDER BY
+          last DESC
+        LIMIT 2000
+      `, { hours: Math.min(Number(req.params.hours) || 24, 168), error: redirectRefused }))
+    })
+
     server = app.listen(port, () => {
       log(`Webserver listening on port ${port}`)
     })

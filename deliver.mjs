@@ -4,6 +4,7 @@ import {validUrl, agentFor} from './resolve.mjs'
 const redirectCodes = [301, 302, 303, 307, 308]
 
 export const maxRedirects = 3
+export const redirectRefused = 'Invalid URL (redirect)'
 export const maxResponseBytes = 512 * 1024
 
 /**
@@ -18,7 +19,8 @@ export async function deliver (url, {method = 'post', headers = {}, body, signal
 
   for (let hop = 0; ; hop++) {
     if (!(await check(target))) {
-      throw new Error('Invalid URL')
+      // After a redirect the recipient's server sent us there: its own text, for the report (apiserver: /refused)
+      throw new Error(hop === 0 ? 'Invalid URL' : redirectRefused)
     }
 
     const call = await fetch(target, {
