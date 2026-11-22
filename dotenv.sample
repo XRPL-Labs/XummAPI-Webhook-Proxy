@@ -12,3 +12,7 @@ PROXY_CONFIG_MYSQL_PORT=3306
 # PROXY_CONFIG_MYSQL_DATABASE=
 
 # PROXY_CONFIG_MYSQL_CONNLIMIT=20
+
+# Our own domains: a destination on one of them (or a subdomain) is delivered only when it is one of the exact URLs
+# PROXY_CONFIG_PROTECTED_DOMAINS=example.com,example.org
+# PROXY_CONFIG_PROTECTED_ALLOWED_URLS=https://hooks.example.com/webhook,https://example.org/api/hook

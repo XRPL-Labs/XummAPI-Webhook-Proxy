@@ -1,7 +1,7 @@
 // node --test test/
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {publicAddress, publicLookup, validUrl} from '../resolve.mjs'
+import {publicAddress, publicLookup, validUrl, protectedRefused, sameHost} from '../resolve.mjs'
 import {deliver, maxRedirects, redirectRefused} from '../deliver.mjs'
 
 const notPublic = [
@@ -65,10 +65,16 @@ test('deliver: a redirect to a local address is refused, no request is made to i
   }
 })
 
-test('deliver: a redirect chain public -> public -> local stops before the local hop', async () => {
-  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: 'https://1.1.1.1/b'}, 'https://1.1.1.1/b': {status: 302, location: 'http://10.0.0.5/'}})
-  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch}), /Invalid URL/)
-  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a', 'https://1.1.1.1/b'])
+test('deliver: a redirect to another host is not followed, also when that host is public', async () => {
+  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: 'https://1.1.1.1/b'}})
+  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch, protect: {}}), e => e.message === redirectRefused)
+  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a'])
+})
+
+test('deliver: a chain on the same host that ends at a local address stops before the local hop', async () => {
+  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: '/b'}, 'https://8.8.8.8/b': {status: 302, location: 'http://10.0.0.5/'}})
+  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch, protect: {}}), e => e.message === redirectRefused)
+  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a', 'https://8.8.8.8/b'])
 })
 
 test('deliver: a redirect to a public address is followed, with the method rules of before', async () => {
@@ -100,4 +106,41 @@ test('deliver: a first URL that is not public is refused without a request', asy
   await assert.rejects(deliver('http://[::ffff:127.0.0.1]/', request, {fetch}), e => e.message === 'Invalid URL')
   assert.equal(seen.length, 0)
   assert.equal(redirectRefused, 'Invalid URL (redirect)')
+})
+
+const protect = {domains: 'example-corp.com, example-app.io', allowed: 'https://desk.example-corp.com/api/voucher/webhook, https://example-app.io/xapp/kyc'}
+
+test('sameHost', () => {
+  assert.equal(sameHost('http://a.example/x', 'https://A.example:8443/y'), true)
+  assert.equal(sameHost('https://a.example/', 'https://www.a.example/'), false)
+  assert.equal(sameHost('https://a.example/', 'not a url'), false)
+})
+
+test('protectedRefused: our own domains only for the exact first-party URLs', () => {
+  for (const u of ['https://desk.example-corp.com/api/voucher/webhook', 'https://desk.example-corp.com/api/voucher/webhook/', 'https://desk.example-corp.com/api/voucher/webhook?x=1', 'https://EXAMPLE-app.io/xapp/kyc']) assert.equal(protectedRefused(u, protect), false, u)
+  for (const u of ['https://desk.example-corp.com/', 'https://desk.example-corp.com/api/voucher', 'https://desk.example-corp.com/api/voucher/webhook/../../login', 'https://desk.example-corp.com/api/voucher/webhook%2f..%2f..%2flogin', 'http://desk.example-corp.com/api/voucher/webhook',
+    'https://desk.example-corp.com:8443/api/voucher/webhook', 'https://metabase.example-corp.com/api/session/properties', 'https://example-corp.com/', 'https://a.b.example-corp.com/x', 'https://example-app.io/', 'https://example-app.io./xapp/other']) assert.equal(protectedRefused(u, protect), true, u)
+  // Not ours: never refused by this rule
+  for (const u of ['https://hooks.example.net/x', 'https://notexample-corp.com/', 'https://example-corp.com.evil.example/', 'not a url']) assert.equal(protectedRefused(u, protect), false, u)
+  // No list in the configuration: nothing is protected
+  assert.equal(protectedRefused('https://metabase.example-corp.com/', {}), false)
+  assert.equal(protectedRefused('https://metabase.example-corp.com/', undefined), false)
+})
+
+test('deliver: a first URL on a protected domain is refused without a request, the exact first-party URL is delivered', async () => {
+  const a = client({})
+  await assert.rejects(deliver('https://metabase.example-corp.com/api/session/properties', request, {fetch: a.fetch, check: async () => true, protect}), e => e.message === 'Invalid URL')
+  assert.equal(a.seen.length, 0)
+  const b = client({})
+  const call = await deliver('https://desk.example-corp.com/api/voucher/webhook', request, {fetch: b.fetch, check: async () => true, protect})
+  assert.equal(call.status, 200)
+  assert.equal(b.seen.length, 1)
+})
+
+test('deliver: a public URL that redirects to a protected domain is refused, no request reaches our site', async () => {
+  for (const location of ['https://desk.example-corp.com/', 'https://desk.example-corp.com/api/voucher/webhook', 'https://metabase.example-corp.com/api/user/current']) {
+    const {fetch, seen} = client({'https://tunnel.example.net/w': {status: 307, location}})
+    await assert.rejects(deliver('https://tunnel.example.net/w', request, {fetch, check: async () => true, protect}), e => e.message === redirectRefused, location)
+    assert.deepEqual(seen.map(s => s.url), ['https://tunnel.example.net/w'], location)
+  }
 })

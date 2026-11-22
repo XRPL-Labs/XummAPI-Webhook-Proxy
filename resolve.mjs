@@ -98,3 +98,37 @@ export async function validUrl (url) {
     })
   })
 }
+
+/**
+ * Destinations on our own domains. This service calls URLs that strangers choose; our own sites must not treat its
+ * address as one of ours. So: a URL on a protected domain (or a subdomain of it) is delivered only when it is one of
+ * the exact first-party webhook URLs (scheme, host, port and path; the query is not compared).
+ * Both lists come from the configuration (.env): PROXY_CONFIG_PROTECTED_DOMAINS and PROXY_CONFIG_PROTECTED_ALLOWED_URLS,
+ * comma separated. No list: nothing is protected (as before).
+ */
+const list = value => String(value || '').split(',').map(v => v.trim()).filter(Boolean)
+const exact = url => { const u = new URL(url); return (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase() }
+
+export function protectedRefused (url, {domains, allowed} = {}) {
+  const protect = list(domains).map(d => d.toLowerCase().replace(/^\*?\./, ''))
+  if (protect.length === 0) return false
+  let parsed
+  try {
+    parsed = new URL(String(url))
+  } catch (e) {
+    return false // Not a URL: refused elsewhere
+  }
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '')
+  if (!protect.some(d => host === d || host.endsWith('.' + d))) return false
+  const ok = list(allowed).map(a => { try { return exact(a) } catch (e) { return '' } }).filter(Boolean)
+  return !ok.includes(exact(parsed.toString()))
+}
+
+// A redirect stays on the host that was asked: the recipient chose that host, not another one
+export function sameHost (a, b) {
+  try {
+    return new URL(String(a)).hostname.toLowerCase() === new URL(String(b)).hostname.toLowerCase()
+  } catch (e) {
+    return false
+  }
+}
