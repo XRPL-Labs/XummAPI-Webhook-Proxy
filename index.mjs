@@ -7,6 +7,8 @@ import {createSender} from './send.mjs'
 import {query} from './database.mjs'
 import {redis, channel as redisChannel} from './redis.mjs'
 import {apiserver} from './apiserver.mjs'
+import {handleMessage} from './queue.mjs'
+import {errorTrace} from './logtext.mjs'
 
 import debug from 'debug'
 const log = debug('xummproxy')
@@ -15,7 +17,7 @@ const log = debug('xummproxy')
 const sender = createSender({query})
 
 process.on('unhandledRejection', e => {
-  console.log('An unhandledRejection occurred', e)
+  console.log('An unhandledRejection occurred', errorTrace(e))
 })
 
 apiserver.start()
@@ -48,25 +50,11 @@ process.on('SIGINT', function () {
 while (processing) {
   log('BLPOP')
   const [channel, message] = await redis.blpop(redisChannel, 0)
-  log('REDIS message received', { channel, message })
+  log('REDIS message received', { channel, bytes: String(message ?? '').length })
   if (redisChannel === channel) {
-    try {
-      const data = JSON.parse(message)
-      if (typeof data.url === 'string' && typeof data.payload === 'string') {
-        if (typeof data.data === 'object' && data) {
-          log('Valid REDIS message, process...', data)
-          // if (processing) {
-          //   counter.inc()
-          // }
-          sender.send(data.url, data.data, data.payload, data?.secret || '')
-        } else {
-          log('Invalid message, missing data object')
-        }
-      } else {
-        log('Invalid message, missing url/payload')
-      }
-    } catch (e) {
-      log('Error decoding REDIS message', e.message)
-    }
+    // if (processing) {
+    //   counter.inc()
+    // }
+    handleMessage(message, sender.send)
   }
 }
