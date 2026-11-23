@@ -3,12 +3,16 @@
 //   name: 'Historic Requests'
 // })
 
-import {send, currentCalls} from './send.mjs'
+import {createSender} from './send.mjs'
+import {query} from './database.mjs'
 import {redis, channel as redisChannel} from './redis.mjs'
 import {apiserver} from './apiserver.mjs'
 
 import debug from 'debug'
 const log = debug('xummproxy')
+
+// Limits for the deliveries at the same time: PROXY_CONFIG_MAX_DELIVERIES, PROXY_CONFIG_MAX_DELIVERIES_PER_HOST
+const sender = createSender({query})
 
 process.on('unhandledRejection', e => {
   console.log('An unhandledRejection occurred', e)
@@ -25,8 +29,8 @@ process.on('SIGINT', function () {
     log('Graceful Stop, unsubscribing from Redis and cleaning up...')
     // redis.unsubscribe(redisChannel)
     setInterval(function () {
-      log('Waiting for current calls to finish...', currentCalls)
-      if (currentCalls < 1) {
+      log('Waiting for current calls to finish...', sender.pending(), sender.limiter.stats())
+      if (sender.pending() < 1) {
         log('Ended. Shutting down in 3 sec.')
 
         setTimeout(function () {
@@ -54,7 +58,7 @@ while (processing) {
           // if (processing) {
           //   counter.inc()
           // }
-          send(data.url, data.data, data.payload, data?.secret || '')
+          sender.send(data.url, data.data, data.payload, data?.secret || '')
         } else {
           log('Invalid message, missing data object')
         }

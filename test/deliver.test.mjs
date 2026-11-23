@@ -5,12 +5,12 @@ import {publicAddress, publicLookup, validUrl, protectedRefused, protectedDomain
 import {deliver, maxRedirects, redirectRefused} from '../deliver.mjs'
 
 const notPublic = [
-  '127.0.0.1', '127.1.2.3', '10.0.0.1', '10.133.0.10', '172.16.0.1', '192.168.1.1', '169.254.169.254', '0.0.0.0',
+  '127.0.0.1', '127.1.2.3', '10.0.0.1', '10.20.0.10', '172.16.0.1', '192.168.1.1', '169.254.169.254', '0.0.0.0',
   '100.64.0.1', '198.18.0.1', '192.0.2.1', '224.0.0.1', '240.0.0.1', '255.255.255.255',
   '::1', '::', 'fe80::1', 'fd00::1', 'ff02::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:169.254.169.254',
   '64:ff9b::7f00:1', '2002:7f00:1::', 'not an address', '',
 ]
-const isPublic = ['8.8.8.8', '1.1.1.1', '164.92.156.104', '2606:4700::1111', '::ffff:8.8.8.8']
+const isPublic = ['8.8.8.8', '1.1.1.1', '9.9.9.9', '2606:4700::1111', '::ffff:8.8.8.8']
 
 test('publicAddress: only global unicast addresses', () => {
   for (const a of notPublic) assert.equal(publicAddress(a), false, a)
@@ -20,7 +20,7 @@ test('publicAddress: only global unicast addresses', () => {
 test('validUrl: refuses what is not a public http(s) destination, in any notation', async () => {
   const refusedUrls = [
     'http://127.0.0.1/', 'http://127.0.0.1:6500/x', 'http://[::1]/', 'http://[::ffff:127.0.0.1]/', 'http://[::ffff:7f00:1]/',
-    'http://0.0.0.0/', 'http://[::]/', 'http://169.254.169.254/metadata/v1.json', 'http://10.133.0.10:3306/',
+    'http://0.0.0.0/', 'http://[::]/', 'http://169.254.169.254/metadata/v1.json', 'http://10.20.0.10:3306/',
     'http://2130706433/', 'http://0x7f000001/', 'http://0x7f.1/', 'http://127.1/', 'http://017700000001/',
     'http://localhost/', 'http://localhost.:80/', 'https://user:pass@8.8.8.8/', 'http://user@8.8.8.8/',
     'file:///etc/passwd', 'ftp://8.8.8.8/', 'gopher://8.8.8.8/', '/relative', './relative', 'http://', 'not a url', '',
@@ -56,7 +56,7 @@ test('deliver: no redirect: one request, redirects are never followed by the HTT
 })
 
 test('deliver: a redirect to a local address is refused, no request is made to it', async () => {
-  for (const location of ['http://127.0.0.1/', 'http://169.254.169.254/metadata/v1.json', 'http://10.133.0.10:3306/', 'http://[::ffff:127.0.0.1]/', 'http://localhost:6500/', 'file:///etc/passwd']) {
+  for (const location of ['http://127.0.0.1/', 'http://169.254.169.254/metadata/v1.json', 'http://10.20.0.10:3306/', 'http://[::ffff:127.0.0.1]/', 'http://localhost:6500/', 'file:///etc/passwd']) {
     for (const status of [301, 302, 303, 307, 308]) {
       const {fetch, seen} = client({'https://8.8.8.8/w': {status, location}})
       await assert.rejects(deliver('https://8.8.8.8/w', request, {fetch}), e => e.message === redirectRefused, status + ' ' + location)

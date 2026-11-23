@@ -21,3 +21,9 @@ PROXY_CONFIG_MYSQL_PORT=3306
 # Reserved address blocks (CIDR, IPv4 and IPv6, comma separated): a destination with an address in one of these blocks
 # is refused, except for the exact URLs of PROXY_CONFIG_PROTECTED_ALLOWED_URLS.
 # PROXY_CONFIG_RESERVED_ADDRESS_BLOCKS=192.0.2.0/24,2001:db8::/32,198.51.100.7
+
+# Deliveries at the same time, for all destinations together (default 200) and per destination host (default 20).
+# A delivery over a limit waits for its turn, it is not refused: per host in order of arrival, and the hosts that wait
+# take turns. One delivery ends after 15 seconds at most (request, redirects and the read of the response).
+# PROXY_CONFIG_MAX_DELIVERIES=200
+# PROXY_CONFIG_MAX_DELIVERIES_PER_HOST=20
