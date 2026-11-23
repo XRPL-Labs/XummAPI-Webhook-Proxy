@@ -221,10 +221,10 @@ test('source: a log call gets ids, hosts, numbers and error labels only', async 
   const {readFile} = await import('node:fs/promises')
   // What a log call can have of a job or an error
   const allowed = [
-    /\bhostOf\((?:data\.)?url\)/g, /\berror(?:Code|Text|Trace)\(e\)/g, /\be\?\.name\b/g, /\bdata\.payload\b/g,
+    /\bhostOf\((?:data\.)?url\)/g, /\berror(?:Code|Text|Trace)\(e\)/g, /\breason\(e\)/g, /\be\?\.name\b/g, /\bdata\.payload\b/g,
     /\bString\(message \?\? ''\)\.length\b/g, /\bBuffer\.byteLength\(call\.text\)/g, /'[^']*'/g, /`[^`$]*`/g,
   ]
-  for (const file of ['index.mjs', 'queue.mjs', 'send.mjs']) {
+  for (const file of ['index.mjs', 'queue.mjs', 'send.mjs', 'reader.mjs']) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8')
     const calls = source.split('\n').filter(line => /^\s*(log|console\.log)\(/.test(line))
     assert.ok(calls.length > 0, file)

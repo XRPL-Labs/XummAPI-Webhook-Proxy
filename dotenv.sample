@@ -4,6 +4,14 @@ PROXY_CONFIG_REDIS_HOST=127.0.0.1
 # PROXY_CONFIG_REDIS_PASSWORD=
 # PROXY_CONFIG_REDIS_TLS=
 
+# The queue reader. One read of the queue waits this many seconds for a message, then the next read starts.
+# No answer for the grace time after that: the connection to Redis is made again. The first TCP keepalive probe is
+# sent after REDIS_KEEPALIVE seconds without traffic. A log line when there was no answer for SILENT_MINUTES.
+# PROXY_CONFIG_QUEUE_READ_TIMEOUT=10
+# PROXY_CONFIG_QUEUE_READ_GRACE=10
+# PROXY_CONFIG_QUEUE_SILENT_MINUTES=5
+# PROXY_CONFIG_REDIS_KEEPALIVE=15
+
 PROXY_CONFIG_MYSQL_HOST=127.0.0.1
 PROXY_CONFIG_MYSQL_PORT=3306
 
