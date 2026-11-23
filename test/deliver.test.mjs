@@ -1,16 +1,16 @@
 // node --test test/
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {publicAddress, publicLookup, validUrl} from '../resolve.mjs'
+import {publicAddress, publicLookup, validUrl, protectedRefused, protectedDomain, sameHost, parseBlocks, reservedAddress, lookupWith, agentFor, agentForFirstParty} from '../resolve.mjs'
 import {deliver, maxRedirects, redirectRefused} from '../deliver.mjs'
 
 const notPublic = [
-  '127.0.0.1', '127.1.2.3', '10.0.0.1', '10.133.0.10', '172.16.0.1', '192.168.1.1', '169.254.169.254', '0.0.0.0',
+  '127.0.0.1', '127.1.2.3', '10.0.0.1', '10.20.0.10', '172.16.0.1', '192.168.1.1', '169.254.169.254', '0.0.0.0',
   '100.64.0.1', '198.18.0.1', '192.0.2.1', '224.0.0.1', '240.0.0.1', '255.255.255.255',
   '::1', '::', 'fe80::1', 'fd00::1', 'ff02::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:169.254.169.254',
   '64:ff9b::7f00:1', '2002:7f00:1::', 'not an address', '',
 ]
-const isPublic = ['8.8.8.8', '1.1.1.1', '164.92.156.104', '2606:4700::1111', '::ffff:8.8.8.8']
+const isPublic = ['8.8.8.8', '1.1.1.1', '9.9.9.9', '2606:4700::1111', '::ffff:8.8.8.8']
 
 test('publicAddress: only global unicast addresses', () => {
   for (const a of notPublic) assert.equal(publicAddress(a), false, a)
@@ -20,7 +20,7 @@ test('publicAddress: only global unicast addresses', () => {
 test('validUrl: refuses what is not a public http(s) destination, in any notation', async () => {
   const refusedUrls = [
     'http://127.0.0.1/', 'http://127.0.0.1:6500/x', 'http://[::1]/', 'http://[::ffff:127.0.0.1]/', 'http://[::ffff:7f00:1]/',
-    'http://0.0.0.0/', 'http://[::]/', 'http://169.254.169.254/metadata/v1.json', 'http://10.133.0.10:3306/',
+    'http://0.0.0.0/', 'http://[::]/', 'http://169.254.169.254/metadata/v1.json', 'http://10.20.0.10:3306/',
     'http://2130706433/', 'http://0x7f000001/', 'http://0x7f.1/', 'http://127.1/', 'http://017700000001/',
     'http://localhost/', 'http://localhost.:80/', 'https://user:pass@8.8.8.8/', 'http://user@8.8.8.8/',
     'file:///etc/passwd', 'ftp://8.8.8.8/', 'gopher://8.8.8.8/', '/relative', './relative', 'http://', 'not a url', '',
@@ -56,7 +56,7 @@ test('deliver: no redirect: one request, redirects are never followed by the HTT
 })
 
 test('deliver: a redirect to a local address is refused, no request is made to it', async () => {
-  for (const location of ['http://127.0.0.1/', 'http://169.254.169.254/metadata/v1.json', 'http://10.133.0.10:3306/', 'http://[::ffff:127.0.0.1]/', 'http://localhost:6500/', 'file:///etc/passwd']) {
+  for (const location of ['http://127.0.0.1/', 'http://169.254.169.254/metadata/v1.json', 'http://10.20.0.10:3306/', 'http://[::ffff:127.0.0.1]/', 'http://localhost:6500/', 'file:///etc/passwd']) {
     for (const status of [301, 302, 303, 307, 308]) {
       const {fetch, seen} = client({'https://8.8.8.8/w': {status, location}})
       await assert.rejects(deliver('https://8.8.8.8/w', request, {fetch}), e => e.message === redirectRefused, status + ' ' + location)
@@ -65,10 +65,16 @@ test('deliver: a redirect to a local address is refused, no request is made to i
   }
 })
 
-test('deliver: a redirect chain public -> public -> local stops before the local hop', async () => {
-  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: 'https://1.1.1.1/b'}, 'https://1.1.1.1/b': {status: 302, location: 'http://10.0.0.5/'}})
-  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch}), /Invalid URL/)
-  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a', 'https://1.1.1.1/b'])
+test('deliver: a redirect to another host is not followed, also when that host is public', async () => {
+  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: 'https://1.1.1.1/b'}})
+  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch, protect: {}}), e => e.message === redirectRefused)
+  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a'])
+})
+
+test('deliver: a chain on the same host that ends at a local address stops before the local hop', async () => {
+  const {fetch, seen} = client({'https://8.8.8.8/a': {status: 307, location: '/b'}, 'https://8.8.8.8/b': {status: 302, location: 'http://10.0.0.5/'}})
+  await assert.rejects(deliver('https://8.8.8.8/a', request, {fetch, protect: {}}), e => e.message === redirectRefused)
+  assert.deepEqual(seen.map(s => s.url), ['https://8.8.8.8/a', 'https://8.8.8.8/b'])
 })
 
 test('deliver: a redirect to a public address is followed, with the method rules of before', async () => {
@@ -100,4 +106,104 @@ test('deliver: a first URL that is not public is refused without a request', asy
   await assert.rejects(deliver('http://[::ffff:127.0.0.1]/', request, {fetch}), e => e.message === 'Invalid URL')
   assert.equal(seen.length, 0)
   assert.equal(redirectRefused, 'Invalid URL (redirect)')
+})
+
+const protect = {domains: 'example-corp.com, example-app.io', allowed: 'https://desk.example-corp.com/api/voucher/webhook, https://example-app.io/xapp/kyc'}
+
+test('sameHost', () => {
+  assert.equal(sameHost('http://a.example/x', 'https://A.example:8443/y'), true)
+  assert.equal(sameHost('https://a.example/', 'https://www.a.example/'), false)
+  assert.equal(sameHost('https://a.example/', 'not a url'), false)
+})
+
+test('protectedRefused: our own domains only for the exact first-party URLs', () => {
+  for (const u of ['https://desk.example-corp.com/api/voucher/webhook', 'https://desk.example-corp.com/api/voucher/webhook/', 'https://desk.example-corp.com/api/voucher/webhook?x=1', 'https://EXAMPLE-app.io/xapp/kyc']) assert.equal(protectedRefused(u, protect), false, u)
+  for (const u of ['https://desk.example-corp.com/', 'https://desk.example-corp.com/api/voucher', 'https://desk.example-corp.com/api/voucher/webhook/../../login', 'https://desk.example-corp.com/api/voucher/webhook%2f..%2f..%2flogin', 'http://desk.example-corp.com/api/voucher/webhook',
+    'https://desk.example-corp.com:8443/api/voucher/webhook', 'https://metabase.example-corp.com/api/session/properties', 'https://example-corp.com/', 'https://a.b.example-corp.com/x', 'https://example-app.io/', 'https://example-app.io./xapp/other']) assert.equal(protectedRefused(u, protect), true, u)
+  // Not ours: never refused by this rule
+  for (const u of ['https://hooks.example.net/x', 'https://notexample-corp.com/', 'https://example-corp.com.evil.example/', 'not a url']) assert.equal(protectedRefused(u, protect), false, u)
+  // No list in the configuration: nothing is protected
+  assert.equal(protectedRefused('https://metabase.example-corp.com/', {}), false)
+  assert.equal(protectedRefused('https://metabase.example-corp.com/', undefined), false)
+})
+
+test('deliver: a first URL on a protected domain is refused without a request, the exact first-party URL is delivered', async () => {
+  const a = client({})
+  await assert.rejects(deliver('https://metabase.example-corp.com/api/session/properties', request, {fetch: a.fetch, check: async () => true, protect}), e => e.message === 'Invalid URL')
+  assert.equal(a.seen.length, 0)
+  const b = client({})
+  const call = await deliver('https://desk.example-corp.com/api/voucher/webhook', request, {fetch: b.fetch, check: async () => true, protect})
+  assert.equal(call.status, 200)
+  assert.equal(b.seen.length, 1)
+})
+
+test('deliver: a public URL that redirects to a protected domain is refused, no request reaches our site', async () => {
+  for (const location of ['https://desk.example-corp.com/', 'https://desk.example-corp.com/api/voucher/webhook', 'https://metabase.example-corp.com/api/user/current']) {
+    const {fetch, seen} = client({'https://tunnel.example.net/w': {status: 307, location}})
+    await assert.rejects(deliver('https://tunnel.example.net/w', request, {fetch, check: async () => true, protect}), e => e.message === redirectRefused, location)
+    assert.deepEqual(seen.map(s => s.url), ['https://tunnel.example.net/w'], location)
+  }
+})
+
+const APP = '3b58aa5d-0000-4000-8000-000000000001'
+const bound = {domains: 'example-corp.com', allowed: APP + '|https://desk.example-corp.com/api/balance, https://desk.example-corp.com/api/open'}
+
+test('protectedRefused: an entry with an application is only for the webhooks of that application', () => {
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, APP), false)
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, APP.toUpperCase()), false)
+  for (const app of ['', undefined, null, '6defa775-aaee-4370-bfbe-9d554e2e58d9', APP + 'x']) assert.equal(protectedRefused('https://desk.example-corp.com/api/balance', bound, app), true, String(app))
+  // An entry without an application: any application
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/open', bound, ''), false)
+  assert.equal(protectedRefused('https://desk.example-corp.com/api/other', bound, APP), true)
+})
+
+test('deliver: the first-party URL is delivered for its own application only', async () => {
+  const own = client({})
+  await deliver('https://desk.example-corp.com/api/balance', {...request, application: APP}, {fetch: own.fetch, check: async () => true, protect: bound})
+  assert.equal(own.seen.length, 1)
+  const other = client({})
+  await assert.rejects(deliver('https://desk.example-corp.com/api/balance', {...request, application: '6defa775-aaee-4370-bfbe-9d554e2e58d9'}, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
+  await assert.rejects(deliver('https://desk.example-corp.com/api/balance', request, {fetch: other.fetch, check: async () => true, protect: bound}), e => e.message === 'Invalid URL')
+  assert.equal(other.seen.length, 0)
+})
+
+test('reserved address blocks: CIDR and single addresses, IPv4 and IPv6, IPv4-mapped', () => {
+  const blocks = parseBlocks('8.8.8.0/24, 1.1.1.1, 2606:4700::/32, 2001:4860:4860::8888, not a block, ')
+  assert.equal(blocks.length, 4)
+  for (const a of ['8.8.8.8', '8.8.8.0', '8.8.8.255', '1.1.1.1', '2606:4700::1111', '2606:4700:ffff::1', '2001:4860:4860::8888', '::ffff:8.8.8.8']) assert.equal(reservedAddress(a, blocks), true, a)
+  for (const a of ['8.8.9.1', '8.8.7.255', '1.1.1.2', '2606:4701::1', '2001:4860:4860::8844', '10.0.0.1', 'not an address', '']) assert.equal(reservedAddress(a, blocks), false, a)
+  assert.equal(reservedAddress('8.8.8.8', parseBlocks('')), false)
+})
+
+test('lookupWith: every answer must be accepted (one reserved answer of two refuses the name)', async () => {
+  const blocks = parseBlocks('8.8.8.0/24')
+  const open = a => publicAddress(a) && !reservedAddress(a, blocks)
+  const dns = answers => (hostname, options, cb) => cb(null, answers.map(address => ({address, family: 4})))
+  const run = (lookup) => new Promise(resolve => lookup('name.example', {all: true}, (e, list) => resolve(e ? e.code : list.map(a => a.address))))
+  assert.equal(await run(lookupWith(open, dns(['8.8.8.8']))), 'EDESTNOTPUBLIC')
+  assert.equal(await run(lookupWith(open, dns(['9.9.9.9', '8.8.8.8']))), 'EDESTNOTPUBLIC')
+  assert.deepEqual(await run(lookupWith(open, dns(['9.9.9.9']))), ['9.9.9.9'])
+  assert.deepEqual(await run(lookupWith(publicAddress, dns(['8.8.8.8']))), ['8.8.8.8'])
+  assert.equal(await run(lookupWith(publicAddress, dns(['8.8.8.8', '10.0.0.1']))), 'EDESTNOTPUBLIC')
+})
+
+test('deliver: the first-party check and agent only for a URL on a protected domain', async () => {
+  const protect = {domains: 'example.org', allowed: 'https://hooks.example.org/webhook'}
+  assert.equal(protectedDomain('https://hooks.example.org/webhook', protect), true)
+  assert.equal(protectedDomain('https://example.com/webhook', protect), false)
+  const seen = []
+  const fetch = async (url, options) => { seen.push({url, agent: options.agent}); return {status: 200, headers: {get: () => null}} }
+  const check = async (url, options) => { seen.push({check: url, firstParty: options.firstParty}); return true }
+  await deliver('https://hooks.example.org/webhook', {}, {fetch, check, protect})
+  await deliver('https://example.com/webhook', {}, {fetch, check, protect})
+  assert.deepEqual(seen.filter(s => s.check).map(s => s.firstParty), [true, false])
+  assert.deepEqual(seen.filter(s => s.url).map(s => s.agent === agentForFirstParty), [true, false])
+  assert.equal(seen.filter(s => s.url)[1].agent, agentFor)
+})
+
+test('deliver: a destination that the check refuses (reserved block) gets no request', async () => {
+  const seen = []
+  const fetch = async url => { seen.push(url); return {status: 200, headers: {get: () => null}} }
+  await assert.rejects(deliver('https://stranger.example.com/hook', {}, {fetch, check: async (url, {firstParty}) => firstParty, protect: {domains: 'example.org', allowed: ''}}), /Invalid URL/)
+  assert.equal(seen.length, 0)
 })
