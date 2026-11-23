@@ -15,10 +15,27 @@ const alsoRefused = [
   ipaddr.parseCIDR('203.0.113.0/24'),
 ]
 
+// IPv6: special purpose blocks that ipaddr.js 2.0 gives as 'unicast' and that are no global unicast addresses
+// (IANA special purpose registry)
+const alsoRefusedV6 = [
+  ipaddr.parseCIDR('::/96'), // IPv4-compatible form (deprecated): carries an IPv4 address
+  ipaddr.parseCIDR('100::/64'), // discard only
+  ipaddr.parseCIDR('64:ff9b:1::/48'), // local use translation: carries an IPv4 address
+  ipaddr.parseCIDR('2001::/23'), // protocol assignments (2001:0000: to 2001:01ff:)
+  ipaddr.parseCIDR('3fff::/20'), // documentation
+  ipaddr.parseCIDR('5f00::/16'), // segment routing identifiers
+  ipaddr.parseCIDR('fec0::/10'), // site local (deprecated)
+]
+
+// The IPv4-compatible form in dotted notation ('::192.0.2.1', an address in ::/96; a lookup gives this notation):
+// ipaddr.js 2.0 reads it as the IPv4-mapped form ('::ffff:192.0.2.1')
+const compatibleDotted = /^::[^:]*\.[^:]*$/
+
 /**
  * A webhook is delivered to a public address only: global unicast IPv4 / IPv6.
- * Everything else is refused: loopback, private, link local, unspecified, carrier grade NAT, unique local,
- * multicast, reserved, and IPv6 forms that carry an IPv4 address (mapped, NAT64, 6to4, Teredo).
+ * Everything else is refused: loopback, private, link local, site local, unspecified, carrier grade NAT, unique local,
+ * multicast, reserved, special purpose blocks, and IPv6 forms that carry an IPv4 address (mapped, compatible, NAT64,
+ * 6to4, Teredo).
  */
 export function publicAddress (address) {
   let parsed
@@ -27,11 +44,12 @@ export function publicAddress (address) {
   } catch (e) {
     return false
   }
+  if (compatibleDotted.test(String(address))) return false
   if (parsed.kind() === 'ipv6' && parsed.isIPv4MappedAddress()) {
     parsed = parsed.toIPv4Address()
   }
   if (parsed.range() !== 'unicast') return false
-  if (parsed.kind() === 'ipv4' && alsoRefused.some(range => parsed.match(range))) return false
+  if ((parsed.kind() === 'ipv4' ? alsoRefused : alsoRefusedV6).some(range => parsed.match(range))) return false
   return true
 }
 

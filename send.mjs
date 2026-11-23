@@ -10,6 +10,7 @@ import crypto from 'crypto'
 import {config} from './config.mjs'
 import {deliverWithin, deliveryTimeout} from './deliver.mjs'
 import {createLimiter, limitsFrom} from './limits.mjs'
+import {hostOf, errorCode, errorText} from './logtext.mjs'
 
 // let destructing = false
 
@@ -24,13 +25,8 @@ const skipFrom = 10 // answers with 404 on the last attempt, in the past hour
 const hour = 60 * 60 * 1000
 
 // The host of the destination: the key of the limit per host. A redirect stays on this host (deliver.mjs).
-export const hostOf = url => {
-  try {
-    return new URL(String(url)).hostname.toLowerCase().replace(/\.+$/, '')
-  } catch (e) {
-    return '' // Not a URL: refused in deliver()
-  }
-}
+// Not a URL: '' (refused in deliver())
+export {hostOf}
 
 /**
  * The 404 answers on the last attempt in the past hour, for this exact URL.
@@ -69,7 +65,7 @@ export const createSender = ({
 
   // A failed write of the log must not end the delivery
   const record = (sql, params) => Promise.resolve().then(() => query(sql, params)).catch(e => {
-    log('Not recorded', { payload: params?.payload }, e.message)
+    log('Not recorded', { payload: params?.payload }, errorCode(e))
   })
 
   const scheduleRetry = async (url, data, payload, secret, nextAttempt) => {
@@ -116,7 +112,7 @@ export const createSender = ({
       if (!Array.isArray(rows)) return false
       return rows.filter(row => row.url === url && notFound.get(row.payload)?.application === application).length >= skipFrom
     } catch (e) {
-      log('Skip list not checked', { url }, e.message)
+      log('Skip list not checked', { host: hostOf(url) }, errorCode(e))
       return false
     }
   }
@@ -127,7 +123,7 @@ export const createSender = ({
 
     const skipUrl = await urlInvalid(url, application)
     if (skipUrl) {
-      log('Skipping URL', url)
+      log('Skipping URL', { payload, host: hostOf(url) })
       record(`
         INSERT INTO calls (
           payload, url, response_code, response_message, attempt, error
@@ -138,7 +134,10 @@ export const createSender = ({
       return
     }
 
-    log('Calling webhook', { url, data })
+    // The log: ids, host, attempt, status, time and size (logtext.mjs)
+    const host = hostOf(url)
+    const started = Date.now()
+    log('Calling webhook', { payload, host, attempt })
 
     try {
       const body = JSON.stringify(data || {})
@@ -176,7 +175,7 @@ export const createSender = ({
         scheduleRetry(url, data, payload, secret, attempt + 1)
       }
 
-      log({ payload, c: callReturnCode, t: callReturnText.replace(/[ \t\r\n]{1,}/g, ' ').slice(0, 200) })
+      log('Called', { payload, host, attempt, c: callReturnCode, ms: Date.now() - started, bytes: Buffer.byteLength(call.text) })
 
       if (callReturnCode === 404 && attempt === 5) {
         noteNotFound(payload, application)
@@ -197,7 +196,7 @@ export const createSender = ({
         scheduleRetry(url, data, payload, secret, attempt + 1)
       }
 
-      log('Call failed (caught)', { payload, url }, e.message)
+      log('Call failed (caught)', { payload, host, attempt, ms: Date.now() - started }, errorText(e))
 
       record(`
         INSERT INTO calls (
@@ -227,7 +226,7 @@ export const createSender = ({
       }
       await limiter.run(host, () => attemptDelivery(url, data, payload, secret, attempt))
     } catch (e) {
-      log('Attempt failed', { payload, url }, e.message)
+      log('Attempt failed', { payload, host: hostOf(url) }, errorText(e))
     }
 
     currentCalls--

@@ -9,8 +9,19 @@ const notPublic = [
   '100.64.0.1', '198.18.0.1', '192.0.2.1', '224.0.0.1', '240.0.0.1', '255.255.255.255',
   '::1', '::', 'fe80::1', 'fd00::1', 'ff02::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:169.254.169.254',
   '64:ff9b::7f00:1', '2002:7f00:1::', 'not an address', '',
+  // IPv6 special purpose blocks: the IPv4-compatible form (hex and dotted), site local, discard only, local use
+  // translation, protocol assignments, documentation, segment routing
+  '::7f00:1', '::127.0.0.1', '::a9fe:a9fe', '::169.254.169.254', '::a14:a', '::808:808', '::8.8.8.8', '::2', '::1:0',
+  'fec0::1', 'fed0::1', 'feff:ffff::1', '100::1', '100::ffff:ffff:ffff:ffff', '64:ff9b:1::1', '64:ff9b:1:ffff::7f00:1',
+  '2001::1', '2001:1::1', '2001:2::1', '2001:10::1', '2001:20::1', '2001:1ff:ffff::1', '2001:db8::1',
+  '3fff::1', '3fff:fff::1', '5f00::1',
 ]
-const isPublic = ['8.8.8.8', '1.1.1.1', '9.9.9.9', '2606:4700::1111', '::ffff:8.8.8.8']
+const isPublic = [
+  '8.8.8.8', '1.1.1.1', '9.9.9.9', '2606:4700::1111', '::ffff:8.8.8.8',
+  // Global unicast next to the special purpose blocks
+  '2001:200::1', '2001:4860:4860::8888', '2001:67c:2e8:22::c100:68b', '2400:cb00:2048:1::c629:d7a2', '2a00:1450:4001:81b::200e',
+  '2620:fe::fe', '2a03:b0c0:2:d0::1', '2600:1f18::1', '100:0:0:1::1', '64:ff9b:2::1', '3fff:1000::1', '5f01::1', '1::1',
+]
 
 test('publicAddress: only global unicast addresses', () => {
   for (const a of notPublic) assert.equal(publicAddress(a), false, a)
@@ -24,9 +35,27 @@ test('validUrl: refuses what is not a public http(s) destination, in any notatio
     'http://2130706433/', 'http://0x7f000001/', 'http://0x7f.1/', 'http://127.1/', 'http://017700000001/',
     'http://localhost/', 'http://localhost.:80/', 'https://user:pass@8.8.8.8/', 'http://user@8.8.8.8/',
     'file:///etc/passwd', 'ftp://8.8.8.8/', 'gopher://8.8.8.8/', '/relative', './relative', 'http://', 'not a url', '',
+    'http://[::127.0.0.1]/', 'http://[::7f00:1]/', 'http://[::169.254.169.254]/', 'http://[::a9fe:a9fe]/',
+    'http://[::10.20.0.10]:3306/', 'https://[::8.8.8.8]/', 'http://[fec0::1]/', 'http://[100::1]/', 'http://[64:ff9b:1::7f00:1]/',
+    'http://[2001:1::1]/', 'http://[2001:20::1]/', 'http://[3fff::1]/', 'http://[5f00::1]/',
   ]
   for (const u of refusedUrls) assert.equal(await validUrl(u), false, u)
-  for (const u of ['http://8.8.8.8/', 'https://1.1.1.1:8443/hook?a=b', 'https://[2606:4700::1111]/']) assert.equal(await validUrl(u), true, u)
+  for (const u of ['http://8.8.8.8/', 'https://1.1.1.1:8443/hook?a=b', 'https://[2606:4700::1111]/', 'https://[2001:4860:4860::8888]/hook', 'https://[2a00:1450:4001:81b::200e]:8443/']) assert.equal(await validUrl(u), true, u)
+  // The same for a first-party URL: the special purpose blocks are no public addresses for it either
+  for (const u of ['http://[::7f00:1]/', 'http://[fec0::1]/', 'http://[100::1]/']) assert.equal(await validUrl(u, {firstParty: true}), false, u)
+})
+
+test('lookup at connect time: a name with an address in an IPv6 special purpose block is refused (also as one of several)', async () => {
+  const resolveTo = list => (hostname, options, callback) => callback(null, list.map(address => ({address, family: address.includes(':') ? 6 : 4})))
+  for (const address of ['::7f00:1', '::127.0.0.1', '::a9fe:a9fe', '::8.8.8.8', 'fec0::1', '100::1', '64:ff9b:1::1', '2001:1::1']) {
+    for (const list of [[address], ['8.8.8.8', address], ['2606:4700::1111', address]]) {
+      const err = await new Promise(resolve => lookupWith(publicAddress, resolveTo(list))('hook.example', {all: true}, e => resolve(e)))
+      assert.equal(err?.code, 'EDESTNOTPUBLIC', list.join(' '))
+    }
+  }
+  const accepted = await new Promise(resolve => lookupWith(publicAddress, resolveTo(['8.8.8.8', '2606:4700::1111', '2001:4860:4860::8888']))('hook.example', {all: true}, (e, list) => resolve({e, list})))
+  assert.equal(accepted.e, null)
+  assert.equal(accepted.list.length, 3)
 })
 
 test('publicLookup: a name that resolves to a local address is refused at connect time', async () => {
